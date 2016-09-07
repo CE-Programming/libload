@@ -23,7 +23,7 @@
 #include "ti84pce.inc"                            ; standard include file
 
 VERSION_MAJOR              .equ 1
-VERSION_MINOR              .equ 0
+VERSION_MINOR              .equ 1
 
 ; global equates
 arclibrarylocations        .equ pixelShadow2      ; place to store locations of archived libraries
@@ -48,10 +48,11 @@ libnameptr                 .equ pixelShadow+42    ; pointer to name of library t
 ; macro definitions
 #define lib_byte            $C0
 #define jp_byte             $C3
-#define asmflag                $22
-#define prevextracted        $00
-#define foundprgmstart      $01
-#define keeplibinarc        $02
+#define asmflag             $22
+
+#define prevextracted       0
+#define foundprgmstart      1
+#define keeplibinarc        2
 
 #macro relocate(new_location)
  #define old_location eval($)
@@ -103,7 +104,7 @@ relocate(plotSScreen)
  ld (eSP),sp                       ; save the stack pointer if we hit an error
  
  ld a,(hl)                         ; hl->maybe $C0 -- If the program is including libs
- cp lib_byte                       ; is there a library we have to extract?
+ cp a,lib_byte                     ; is there a library we have to extract?
  jr z,_extractlib                  ; if not, just run it from wherever de was pointing
  jp (hl)                           ; return to execution if there are no libs
 _extractlib:                       ; hl->NULL terminated libray name string -> $C0,"LIBNAME",0
@@ -339,7 +340,7 @@ _donerelocateabsolutes:
  
  ld hl,(nextlibptr)
  ld a,(hl)                         ; hl->maybe lib_byte -- If the program is using more libraries
- cp lib_byte
+ cp a,lib_byte
  jr nz,_checkifdependencies
  jp _extractlib                    ; extract the next library
  
@@ -417,26 +418,38 @@ _throwerror:                      ; draw the error message onscreen
  call _puts
  ld hl,op1+1
  call _puts
+ call _newline
+ call _newline
+ ld hl,_downloadstr
+ call _puts
+ push hl
+ call _newline
+ pop hl
+ call _puts
 _waitkeyloop:
  call _getcsc
- cp skenter
+ cp a,skenter
  jr z,_exitwaitloop
- cp skclear
- jr z,_exitwaitloop
- cp sk2nd
+ cp a,skclear
  jr z,_exitwaitloop
  jr _waitkeyloop
 _exitwaitloop:
  call _clrscrn
- call _homeup
- ret                             ; stop execution of the program
- 
+ jp _homeup                      ; stop execution of the program
+
 _versionlibstr:                  ; strings for LibLoad Errors
  .db "ERROR: Library Version",0
 _missinglibstr:
  .db "ERROR: Missing Library",0
 _libnamestr:
  .db "Library Name: ",0
+_downloadstr:
+ .db "Download here: ",0
+_urlstr:
+ .db "https://tiny.cc/clibs",0
 endrelocate()
 _libloadend:
  .db VERSION_MAJOR,VERSION_MINOR ; version information
+_libload_end:
+
+.echo "LibLoad size: ",_libload_end-_libload," bytes"
