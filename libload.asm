@@ -1,6 +1,6 @@
 ;=========================================================================
 ; Copyright (C) 2015 Matt Waltz
-; Version 1.0
+; Version 2.0
 ;
 ; This library is free software; you can redistribute it and/or
 ; modify it under the terms of the GNU Lesser General Public
@@ -22,8 +22,8 @@
 ; includes
 #include "ti84pce.inc"                            ; standard include file
 
-VERSION_MAJOR              .equ 1
-VERSION_MINOR              .equ 1
+VERSION_MAJOR              .equ 2
+VERSION_MINOR              .equ 0
 
 ; global equates
 arclibrarylocations        .equ pixelShadow2      ; place to store locations of archived libraries
@@ -72,8 +72,6 @@ _libload:                          ; this code executes in the archive (entered 
  ld iy,$D00080                     ; make sure iy is correct
  push de 
   push hl
-   call _clrscrn                   ; clean up the screen a bit
-   call _homeup                    ; if we encounter an error
    
    ld bc,60000
    ld hl,pixelShadow
@@ -83,7 +81,6 @@ _libload:                          ; this code executes in the archive (entered 
    ld (endarclibrarylocations),hl
    ld hl,dependencyqueuelocation
    ld (enddependencyqueue),hl
-  
   pop hl                           ; restore the pointer to LibLoad
   
   ld de,_libloadstart
@@ -198,15 +195,15 @@ _libinarc:
   ld (appvarstartptr),hl           ; hl->start of appvar in archived memory
   ld a,(hl)                        ; $C0
   inc hl
-  cp a,(hl)                        ; $C0 - Magic number checks
+  inc a
+  cp a,(hl)                        ; $C1 - Magic number checks
   
-  jr z,_libexists                  ; throw an error if the library doesn't match the magic numbers
-  jp _missingerror                 ; jump to the lib missing handler
+  jp nz,_versionerror              ; throw an error if the library doesn't match the magic numbers
   
 _libexists:
   inc hl                           ; hl->version byte in library
   push hl                          ; save location of version byte
-   dec bc \ dec bc                 ; for the $C0 bytes
+   dec bc \ dec bc                 ; for the $C0,$C1 bytes
    add hl,bc                       ; hl->end of library
    ld bc,-3
    add hl,bc
@@ -222,9 +219,7 @@ _libexists:
   ld a,(de)                        ; a=version of library
  pop hl                            ; hl->version of library in the program
  cp a,(hl)                         ; check if library version in program is greater than library version on-calc
- jr nc,_goodversion                ; c flag set if on-calc lib version is less than the one used in the program
- 
- jp _versionerror                  ; jump to the version error handler
+ jp c,_versionerror                ; c flag set if on-calc lib version is less than the one used in the program
  
 _goodversion:
  inc hl                            ; hl->start of program function jump table
@@ -235,13 +230,7 @@ _goodversion:
  ld (hl),de
  inc hl \ inc hl \ inc hl
  ld (endarclibrarylocations),hl
- 
- ld hl,(extractedsize)
- 
- call _enoughmem                   ; hl=size of library
- jr nc,_havetheram
- jp _errmemory                     ; throw a memory error -- need more ram!
-_havetheram:
+
  ld hl,usermem                     ; this is where programs are extracted to
  ld de,(asm_prgm_size)
  add hl,de                         ; hl->end of program+libaries
@@ -272,6 +261,14 @@ _needtoextractlib:
  jr nz,_resloveentrypoints         ; only need to resolve entry points if in the archive
  
  ld hl,(extractedsize)
+ push hl
+ push de
+ push bc
+ call _enoughmem                   ; hl=size of library
+ pop bc
+ pop de
+ pop hl
+ jp c,_errmemory                   ; throw a memory error -- need more ram!
  call _insertmem                   ; insert memory for the relocated library (de)
  
  ld hl,(extractedsize)             ; extracted size = dependency jumps + library code
@@ -293,10 +290,13 @@ _resloveentrypointsloop:
  jr nz,_doneresloveentrypoints
  inc hl                            ; bypass jp byte ($C3)
  push hl
-  ld de,(hl)                       ; offset in vector table (0,3,6, etc.)
-  ld hl,(vectortblptr)             ; hl->start of vector table
+  ld hl,(hl)                       ; offset in vector table (0,3,6, etc.)
+  ld bc,3
+  call __idivs                     ; originally the offset was just added because vectors were stored in three bytes, now it is just 2 to save space
+  add hl,hl                        ; (offset/3) * 2
+  ld de,(vectortblptr)             ; hl->start of vector table
   add hl,de                        ; hl->correct vector entry
-  ld de,(hl)                       ; de=offest in lib for function
+  call _loaddeind_s                ; de=offest in lib for function
   ld hl,(ramlocation)
   add hl,de                        ; hl->function in ram
   ex de,hl                         ; de->function in ram
@@ -320,7 +320,11 @@ _relocateabsolutesloop:
  call _cphlde                      ; have we reached the end of the relocation table
  jr z,_donerelocateabsolutes
  push hl                           ; save pointer to relocation table current
-  ld hl,(hl)                       ; hl->offset in ram library to relocate
+  ld a,(hl)
+  inc hl
+  ld h,(hl)
+  ld l,a                           ; hl->offset in ram library to relocate
+  call _SetHLUTo0
   ld de,(ramlocation)
   add hl,de                        ; hl->location in library to relocate
   push hl
@@ -331,7 +335,7 @@ _relocateabsolutesloop:
   pop hl
   ld (hl),de                       ; resolved absolute address
  pop hl
- inc hl \ inc hl \ inc hl          ; move to next relocation vector
+ inc hl \ inc hl                   ; move to next relocation vector
  jr _relocateabsolutesloop
 _donerelocateabsolutes:
 
@@ -341,8 +345,7 @@ _donerelocateabsolutes:
  ld hl,(nextlibptr)
  ld a,(hl)                         ; hl->maybe lib_byte -- If the program is using more libraries
  cp a,lib_byte
- jr nz,_checkifdependencies
- jp _extractlib                    ; extract the next library
+ jp z,_extractlib                  ; extract the next library
  
 _checkifdependencies:              ; the first time we hit this, we have all the dependencies placed onto the queue that the libraries use.
  bit foundprgmstart,(iy+asmflag)
@@ -406,7 +409,14 @@ _versionerror:
 _missingerror:                    ; can't find a dependent lib
  ld hl,_missinglibstr
 _throwerror:                      ; draw the error message onscreen
+ ld a,lcdBpp16
+ ld (mpLcdCtrl),a
  ld sp,(eSP)
+ push hl
+ call _drawstatusbar
+ call _clrscrn                   ; clean up the screen a bit
+ call _homeup                    ; if we encounter an error
+ pop hl
  set textInverse,(iy+textFlags)
  ld a,2
  ld (curcol),a
