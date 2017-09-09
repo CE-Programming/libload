@@ -1,6 +1,6 @@
 ;=========================================================================
-; Copyright (C) 2015 Matt Waltz
-; Version 2.0
+; Copyright (C) 2017 Matt Waltz
+; Version 2.1
 ;
 ; This library is free software; you can redistribute it and/or
 ; modify it under the terms of the GNU Lesser General Public
@@ -20,53 +20,54 @@
 ;=========================================================================
 
 ; includes
-#include "ti84pce.inc"                            ; standard include file
+include 'include/ez80.inc'
+include 'include/ti84pceg.inc'                 ; standard include file
+include 'include/tiformat.inc'                 ; ti format for fasmg
+format ti appvar 'LibLoad' archived
 
-VERSION_MAJOR              .equ 2
-VERSION_MINOR              .equ 0
+define VERSION_MAJOR       2
+define VERSION_MINOR       1
 
 ; global equates
-arclibrarylocations        .equ pixelShadow2      ; place to store locations of archived libraries
-dependencyqueuelocation    .equ cmdPixelShadow    ; queue for keeping track of which libraries still need to be resolved
+arclibrarylocations        = pixelShadow2      ; place to store locations of archived libraries
+dependencyqueuelocation    = cmdPixelShadow    ; queue for keeping track of which libraries still need to be resolved
 
-eSP                        .equ pixelShadow       ; save sp for errors
-totallibsize               .equ pixelShadow+3     ; total size of the library appvar (not used except storage)
-extractedsize              .equ pixelShadow+6     ; holds extracted size of the library
-arclocation                .equ pixelShadow+9     ; pointer to place to begin extraction from the archive
-ramlocation                .equ pixelShadow+12    ; pointer to place to extract in usermem
-endarclibrarylocations     .equ pixelShadow+15    ; pointer to end of archived library locations in arclibrarylocations
-enddependencyqueue         .equ pixelShadow+18    ; pointer to end of dependency stack
-nextlibptr                 .equ pixelShadow+21    ; pointer to save location of next lib place that needs to be relocated
-jumptblptr                 .equ pixelShadow+24    ; pointer to start of function table for each library in the program
-vectortblptr               .equ pixelShadow+27    ; pointer to start of archived function vector table
-relocationtblptr           .equ pixelShadow+30    ; pointer to start of relocation table
-endrelocationtbl           .equ pixelShadow+33    ; pointer to end of relocation table
-prgmstart                  .equ pixelShadow+36    ; pointer to start of actual program when dealing with dependencies
-appvarstartptr             .equ pixelShadow+39    ; pointer to start of library appvar in archive
-libnameptr                 .equ pixelShadow+42    ; pointer to name of library to extract
+eSP                        = pixelShadow       ; save sp for errors
+totallibsize               = pixelShadow+3     ; total size of the library appvar (not used except storage)
+extractedsize              = pixelShadow+6     ; holds extracted size of the library
+arclocation                = pixelShadow+9     ; pointer to place to begin extraction from the archive
+ramlocation                = pixelShadow+12    ; pointer to place to extract in usermem
+endarclibrarylocations     = pixelShadow+15    ; pointer to end of archived library locations in arclibrarylocations
+enddependencyqueue         = pixelShadow+18    ; pointer to end of dependency stack
+nextlibptr                 = pixelShadow+21    ; pointer to save location of next lib place that needs to be relocated
+jumptblptr                 = pixelShadow+24    ; pointer to start of function table for each library in the program
+vectortblptr               = pixelShadow+27    ; pointer to start of archived function vector table
+relocationtblptr           = pixelShadow+30    ; pointer to start of relocation table
+endrelocationtbl           = pixelShadow+33    ; pointer to end of relocation table
+prgmstart                  = pixelShadow+36    ; pointer to start of actual program when dealing with dependencies
+appvarstartptr             = pixelShadow+39    ; pointer to start of library appvar in archive
+libnameptr                 = pixelShadow+42    ; pointer to name of library to extract
 
 ; macro definitions
-#define lib_byte            $C0
-#define jp_byte             $C3
-#define asmflag             $22
+define lib_byte            $C0     ; library signifier byte
+define jp_byte             $C3     ; byte for 'jp' opcode
+define asmflag             $22     ; flag storage
 
-#define prevextracted       0
-#define foundprgmstart      1
-#define keeplibinarc        2
+define prevextracted       0
+define foundprgmstart      1
+define keeplibinarc        2
 
-#macro relocate(new_location)
- #define old_location eval($)
- .org new_location
- #define g_location eval(new_location)
-#endmacro
+macro relocate location
+ olocation = $
+ org new_location
+ rlocation = location
+end macro
 
-#macro endrelocate()
- #ifdef g_location
- .org $-g_location + old_location
- #undefine g_location
- #undefine old_location
- #endif
-#endmacro
+macro endrelocate
+ org $-rlocation+olocation
+end macro
+
+org 0                              ; base location
 
 _libload:                          ; this code executes in the archive (entered with jp (hl)
  ld iy,$D00080                     ; make sure iy is correct
@@ -150,7 +151,9 @@ _donesearch:                       ; hl->location of library in ram, hl+3->locat
 
  ld de,(hl)                        ; de=location of library vector table in archive
  ld (vectortblptr),de
- inc hl \ inc hl \ inc hl
+ inc hl
+ inc hl
+ inc hl
  ld de,(hl)                        ; de=location of library in ram
  ld (ramlocation),de
  ld hl,(libnameptr)                ; restore pointer to library name
@@ -189,7 +192,8 @@ _libinarc:
   add hl,de
   inc hl                           ; hl->size bytes
   call _loaddeind_s                ; de=total size of library
-  push de \ pop bc                 ; bc=total size of library
+  push de
+  pop bc                           ; bc=total size of library
   ld (totallibsize),bc
   
   ld (appvarstartptr),hl           ; hl->start of appvar in archived memory
@@ -203,7 +207,8 @@ _libinarc:
 _libexists:
   inc hl                           ; hl->version byte in library
   push hl                          ; save location of version byte
-   dec bc \ dec bc                 ; for the $C0,$C1 bytes
+   dec bc
+   dec bc                          ; for the $C0,$C1 bytes
    add hl,bc                       ; hl->end of library
    ld bc,-3
    add hl,bc
@@ -228,7 +233,9 @@ _goodversion:
  ld (jumptblptr),hl                ; save the pointer to the function jump table
  ld hl,(endarclibrarylocations)
  ld (hl),de
- inc hl \ inc hl \ inc hl
+ inc hl
+ inc hl
+ inc hl
  ld (endarclibrarylocations),hl
 
  ld hl,usermem                     ; this is where programs are extracted to
@@ -254,7 +261,9 @@ _needtoextractlib:
  ld de,(ramlocation)
  ld hl,(endarclibrarylocations)
  ld (hl),de
- inc hl \ inc hl \ inc hl
+ inc hl
+ inc hl
+ inc hl
  ld (endarclibrarylocations),hl
  
  bit keeplibinarc,(iy+asmflag)
@@ -302,7 +311,9 @@ _resloveentrypointsloop:
   ex de,hl                         ; de->function in ram
  pop hl                            ; restore jump offset
  ld (hl),de                        ; de=resolved address
- inc hl \ inc hl \ inc hl          ; move to next jump
+ inc hl
+ inc hl
+ inc hl                            ; move to next jump
  jr _resloveentrypointsloop
 _doneresloveentrypoints:           ; finished resolving entry points
  ld (nextlibptr),hl                ; hl->next library in program (if there is one)
@@ -335,7 +346,8 @@ _relocateabsolutesloop:
   pop hl
   ld (hl),de                       ; resolved absolute address
  pop hl
- inc hl \ inc hl                   ; move to next relocation vector
+ inc hl
+ inc hl                   ; move to next relocation vector
  jr _relocateabsolutesloop
 _donerelocateabsolutes:
 
@@ -358,7 +370,9 @@ _nosetstart:
  call _cphlde                      ; make sure we are done parsing the dependency queue
                                    ; now we need to parse the libraries like they are programs. this will be fun.
  jr z,_runpgrm
- dec hl \ dec hl \ dec hl          ; hl->dependency $C0,"LIBNAME",0,VERSION,JUMP_TABLE
+ dec hl
+ dec hl
+ dec hl                            ; hl->dependency $C0,"LIBNAME",0,VERSION,JUMP_TABLE
  ld (enddependencyqueue),hl        ; store pointer to next dependency
  ld hl,(hl)                        ; valid pointer to $C0 (lib_byte)
  jp _extractlib                    ; extract current dependency if needed, or resolve entry points
@@ -378,7 +392,9 @@ _enqueuealldependenciesloop:
  ex de,hl
   ld hl,(enddependencyqueue)
   ld (hl),de                       ; save pointer to start of this dependency -- one at a time
-  inc hl \ inc hl \ inc hl         ; move to next pointer
+  inc hl
+  inc hl
+  inc hl                           ; move to next pointer
   ld (enddependencyqueue),hl       ; save next pointer
  ex de,hl
  
@@ -390,8 +406,10 @@ _movetonextjump:
  cp a,jp_byte
  jr nz,_enqueuealldependenciesloop
 
- inc hl \ inc hl
- inc hl \ inc hl                   ; jp address
+ inc hl
+ inc hl
+ inc hl
+ inc hl                            ; jp address
  jr _movetonextjump
 _checkextracteddependent:
  cp a,appvarobj
@@ -399,7 +417,8 @@ _checkextracteddependent:
  ret
  
 _movetostrngend:
- ld bc,0 \ ld a,c
+ ld bc,0
+ ld a,c
  cpir
  ret
  
@@ -448,18 +467,17 @@ _exitwaitloop:
  jp _homeup                      ; stop execution of the program
 
 _versionlibstr:                  ; strings for LibLoad Errors
- .db "ERROR: Library Version",0
+ db "ERROR: Library Version",0
 _missinglibstr:
- .db "ERROR: Missing Library",0
+ db "ERROR: Missing Library",0
 _libnamestr:
- .db "Library Name: ",0
+ db "Library Name: ",0
 _downloadstr:
- .db "Download here: ",0
+ db "Download here: ",0
 _urlstr:
- .db "https://tiny.cc/clibs",0
-endrelocate()
-_libloadend:
- .db VERSION_MAJOR,VERSION_MINOR ; version information
-_libload_end:
+ db "https://tiny.cc/clibs",0
+endrelocate
 
-.echo "LibLoad size: ",_libload_end-_libload," bytes"
+_libloadend:
+ db VERSION_MAJOR,VERSION_MINOR ; version information
+_libload_end:
