@@ -1,5 +1,5 @@
 ;=========================================================================
-; Copyright (C) 2017 Matt Waltz
+; Copyright (C) 2015-2017 Matt Waltz
 ; Version 2.1
 ;
 ; This library is free software; you can redistribute it and/or
