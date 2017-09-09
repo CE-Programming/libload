@@ -59,7 +59,7 @@ define keeplibinarc        2
 
 macro relocate location
  olocation = $
- org new_location
+ org location
  rlocation = location
 end macro
 
