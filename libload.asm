@@ -29,13 +29,13 @@ define VERSION_MAJOR       2
 define VERSION_MINOR       1
 
 ; global equates
-arclibrarylocations        = pixelShadow2 ; place to store locations of archived libraries
+arclibrarylocations        = pixelShadow2   ; place to store locations of archived libraries
 dependencyqueuelocation    = cmdPixelShadow ; queue for keeping track of which libraries still need to be resolved
 
-eSP                        = pixelShadow ; save sp for errors
-totallibsize               = pixelShadow+3 ; total size of the library appvar (not used except storage)
-extractedsize              = pixelShadow+6 ; holds extracted size of the library
-arclocation                = pixelShadow+9 ; pointer to place to begin extraction from the archive
+eSP                        = pixelShadow    ; save sp for errors
+totallibsize               = pixelShadow+3  ; total size of the library appvar (not used except storage)
+extractedsize              = pixelShadow+6  ; holds extracted size of the library
+arclocation                = pixelShadow+9  ; pointer to place to begin extraction from the archive
 ramlocation                = pixelShadow+12 ; pointer to place to extract in usermem
 endarclibrarylocations     = pixelShadow+15 ; pointer to end of archived library locations in arclibrarylocations
 enddependencyqueue         = pixelShadow+18 ; pointer to end of dependency stack
@@ -70,7 +70,7 @@ end macro
 org 0					; base location
 
 _libload:				; this code executes in the archive (entered with jp (hl)
-	ld	iy,$D00080		; make sure iy is correct
+	ld	iy,flags		; make sure iy is correct
 	push	de 
 	push	hl
    
