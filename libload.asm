@@ -1,6 +1,6 @@
 ;=========================================================================
-; Copyright (C) 2015-2017 Matt Waltz
-; Version 2.1
+; Copyright (C) 2015-2018 Matt Waltz
+; Version 2.2
 ;
 ; This library is free software; you can redistribute it and/or
 ; modify it under the terms of the GNU Lesser General Public
@@ -33,7 +33,7 @@ arclibrarylocations        = pixelShadow2   ; place to store locations of archiv
 dependencyqueuelocation    = cmdPixelShadow ; queue for keeping track of which libraries still need to be resolved
 
 eSP                        = pixelShadow    ; save sp for errors
-totallibsize               = pixelShadow+3  ; total size of the library appvar (not used except storage)
+totallibsize               = pixelShadow+3  ; total size of the library appvar (not used)
 extractedsize              = pixelShadow+6  ; holds extracted size of the library
 arclocation                = pixelShadow+9  ; pointer to place to begin extraction from the archive
 ramlocation                = pixelShadow+12 ; pointer to place to extract in usermem
@@ -71,49 +71,49 @@ org 0					; base location
 
 _libload:				; this code executes in the archive (entered with jp (hl)
 	ld	iy,flags		; make sure iy is correct
-	push	de 
+	push	de
 	push	hl
-   
-	ld	bc,60000
+
+	ld	bc,69000
 	ld	hl,pixelShadow
-	call	_memclear		; initialize to wipe out past runs
-  
+	call	_MemClear		; initialize to wipe out past runs
+
 	ld	hl,arclibrarylocations
 	ld	(endarclibrarylocations),hl
 	ld	hl,dependencyqueuelocation
 	ld	(enddependencyqueue),hl
 	pop	hl			; restore the pointer to LibLoad
-  
+
 	ld	de,_libloadstart
 	add	hl,de
 	ld	de,plotSScreen
 	ld	bc,_libloadend-_libloadstart
 	ldir				; relocate the actual LibLoad
-  
+
 	res	foundprgmstart,(iy+asmflag)
-  
+
 	jp	plotSScreen		; jump to execution block
-  
+
 ; Relocated block begins here
 _libloadstart:
 relocate(plotSScreen)
 	pop	hl			; hl->start of library jump table
- 
+
 	ld	(eSP),sp		; save the stack pointer if we hit an error
- 
+
 	ld	a,(hl)			; hl->maybe $C0 -- If the program is including libs
 	cp	a,lib_byte		; is there a library we have to extract?
 	jr	z,_extractlib		; if not, just run it from wherever de was pointing
 	jp	(hl)			; return to execution if there are no libs
 _extractlib:				; hl->NULL terminated libray name string -> $C0,"LIBNAME",0
-	ld	(hl),appvarobj		; change $C0 byte to mark as extracted
+	ld	(hl),appVarObj		; change $C0 byte to mark as extracted
 	push	hl
-	call	_mov9toop1		; move name of library to op1
+	call	_Mov9ToOP1		; move name of library to op1
 	pop	hl
 	inc	hl
 	res	prevextracted,(iy+asmflag)
 	ld	(libnameptr),hl
-  
+
 _isextracted:				; check if the current library has already been extracted
 	ld	de,arclibrarylocations	; de->place to start search, hl->name to search for
 _checkextractedloop:
@@ -131,7 +131,7 @@ _searchextractedtbl:
 _nomatch:
 	pop	de
 	ld	hl,(endarclibrarylocations)
-	call	_cphlde			; have we reached the end of the table?
+	call	_CpHLDE			; have we reached the end of the table?
 	push	af
 	ex	de,hl
 	ld	de,15			; size of search entry (9=name, 3=ram ptr, 3=arc vec ptr)
@@ -164,17 +164,17 @@ _donesearch:				; hl->location of library in ram, hl+3->location of library vect
 _notextracted:
 	ld	hl,(libnameptr)
 	ld	de,(endarclibrarylocations)
-	call	_mov8b			; copy the string. it shouldn't be bigger than this
+	call	_Mov8b			; copy the string. it shouldn't be bigger than this
 	xor	a
 	ld	(de),a
 	inc	de
 	ld	(endarclibrarylocations),de ; now we are looking after the null byte
- 
+
 	ld	hl,(libnameptr)
 	call	_movetostrngend
 	push	hl			; save the location in the program we are on
 _findbinary:
-	call	_chkfindsym
+	call	_ChkFindSym
 	jr	nc,_foundlibrary	; throw an error if the library doesn't exist
 	jp	_missingerror		; jump to the lib missing handler
 _foundlibrary:
@@ -194,16 +194,16 @@ _libinarc:
 	call	_loaddeind_s		; de=total size of library
 	push	de
 	pop	bc			; bc=total size of library
-	ld	(totallibsize),bc
-  
+;	ld	(totallibsize),bc
+
 	ld	(appvarstartptr),hl	; hl->start of appvar in archived memory
 	ld	a,(hl)			; $C0
 	inc	hl
 	inc	a
 	cp	a,(hl)			; $C1 - Magic number checks
-  
+
 	jp	nz,_versionerror	; throw an error if the library doesn't match the magic numbers
-  
+
 _libexists:
 	inc	hl			; hl->version byte in library
 	push	hl			; save location of version byte
@@ -220,12 +220,12 @@ _libexists:
 	ld	hl,(appvarstartptr)
 	add	hl,de			; hl->start of dependencies -- need to store each dependency onto the queue.
 	ld	(arclocation),hl	; hl->start of library extraction location
-	pop	de			; de->version byte of library        
+	pop	de			; de->version byte of library
 	ld	a,(de)			; a=version of library
 	pop	hl			; hl->version of library in the program
 	cp	a,(hl)			; check if library version in program is greater than library version on-calc
 	jp	c,_versionerror		; c flag set if on-calc lib version is less than the one used in the program
- 
+
 _goodversion:
 	inc	hl			; hl->start of program function jump table
 	inc	de			; de->start of archived function vector table
@@ -242,22 +242,22 @@ _goodversion:
 	ld	de,(asm_prgm_size)
 	add	hl,de			; hl->end of program+libaries
 	ex	de,hl			; de->location to extract to
- 
+
 	ld	(ramlocation),de	; save this pointer
- 
+
 	res	keeplibinarc,(iy+asmflag)
 	ld	hl,(arclocation)	; hl->start of library code in archive
 	ld	de,(extractedsize)
 	add	hl,de			; hl->start of library relocation table
 	ld	(relocationtblptr),hl	; store this
 	ld	de,(endrelocationtbl)
-	call	_cphlde			; check and see if they match -- if so, this library is going to remain in the archive
+	call	_CpHLDE			; check and see if they match -- if so, this library is going to remain in the archive
 	jr	nz,_needtoextractlib
 	ld	hl,(arclocation)
 	ld	(ramlocation),hl	; okay, not a ram location, but it's use is still the same
 	set	keeplibinarc,(iy+asmflag)
 _needtoextractlib:
- 
+
 	ld	de,(ramlocation)
 	ld	hl,(endarclibrarylocations)
 	ld	(hl),de
@@ -265,26 +265,26 @@ _needtoextractlib:
 	inc	hl
 	inc	hl
 	ld	(endarclibrarylocations),hl
- 
+
 	bit	keeplibinarc,(iy+asmflag)
 	jr	nz,_resloveentrypoints	; only need to resolve entry points if in the archive
- 
+
 	ld	hl,(extractedsize)
 	push	hl
 	push	de
 	push	bc
-	call	_enoughmem		; hl=size of library
+	call	_EnoughMem		; hl=size of library
 	pop	bc
 	pop	de
 	pop	hl
 	jp	c,_errmemory		; throw a memory error -- need more ram!
-	call	_insertmem		; insert memory for the relocated library (de)
- 
+	call	_InsertMem		; insert memory for the relocated library (de)
+
 	ld	hl,(extractedsize)	; extracted size = dependency jumps + library code
 	ld	de,(asm_prgm_size)
 	add	hl,de
 	ld	(asm_prgm_size),hl	; store new size of program+libraries
- 
+
 	ld	hl,(arclocation)	; hl->start of library code
 	ld	de,(ramlocation)	; de->insertion place
 	ld	bc,(extractedsize)	; bc=extracted library size
@@ -320,15 +320,15 @@ _doneresloveentrypoints:		; finished resolving entry points
 
 	bit	prevextracted,(iy+asmflag) ; have we already resolved the absolute addresses for the library?
 	jr	nz,_donerelocateabsolutes
- 
+
 	bit	keeplibinarc,(iy+asmflag) ; we don't need to store anything if we are here
 	jr	nz,_donerelocateabsolutes ; really, this is just a precautionary check -- should work fine without this
 
-_relocateabsolutes: 
+_relocateabsolutes:
 	ld	hl,(relocationtblptr)	; restore this
 _relocateabsolutesloop:
 	ld	de,(endrelocationtbl)
-	call	_cphlde			; have we reached the end of the relocation table
+	call	_CpHLDE			; have we reached the end of the relocation table
 	jr	z,_donerelocateabsolutes
 	push	hl			; save pointer to relocation table current
 	ld	a,(hl)
@@ -353,12 +353,12 @@ _donerelocateabsolutes:
 
 	bit	foundprgmstart,(iy+asmflag) ; have we found the start of the program?
 	jr	nz,_nosetstart
- 
+
 	ld	hl,(nextlibptr)
 	ld	a,(hl)			; hl->maybe lib_byte -- If the program is using more libraries
 	cp	a,lib_byte
 	jp	z,_extractlib		; extract the next library
- 
+
 _checkifdependencies:			; the first time we hit this, we have all the dependencies placed onto the queue that the libraries use.
 	bit	foundprgmstart,(iy+asmflag)
 	jr	nz,_nosetstart
@@ -367,7 +367,7 @@ _checkifdependencies:			; the first time we hit this, we have all the dependenci
 _nosetstart:
 	ld	hl,(enddependencyqueue)
 	ld	de,dependencyqueuelocation
-	call	_cphlde			; make sure we are done parsing the dependency queue
+	call	_CpHLDE			; make sure we are done parsing the dependency queue
 					; now we need to parse the libraries like they are programs. this will be fun.
 	jr	z,_runpgrm
 	dec	hl
@@ -380,7 +380,7 @@ _nosetstart:
 _runpgrm:
 	ld	hl,(prgmstart)
 	jp	(hl)			; passed all the checks; let's start execution! :)
- 
+
 _enqueuealldependencies:
 	bit	keeplibinarc,(iy+asmflag) ; we don't need to store anything if we are here
 	ret	nz			; really, this is just a precautionary check -- should work fine without
@@ -388,7 +388,7 @@ _enqueuealldependenciesloop:
 	ld	a,(hl)
 	cp	a,lib_byte		; is there a dependency?
 	jr	nz,_checkextracteddependent
- 
+
 	ex	de,hl
 	ld	hl,(enddependencyqueue)
 	ld	(hl),de			; save pointer to start of this dependency -- one at a time
@@ -397,7 +397,7 @@ _enqueuealldependenciesloop:
 	inc	hl			; move to next pointer
 	ld	(enddependencyqueue),hl	; save next pointer
 	ex	de,hl
- 
+
 _skipdependencystore:
 	call	_movetostrngend
 	inc	hl			; move to start of dependency jump table
@@ -412,16 +412,16 @@ _movetonextjump:
 	inc	hl			; jp address
 	jr	_movetonextjump
 _checkextracteddependent:
-	cp	a,appvarobj
+	cp	a,appVarObj
 	jr	z,_skipdependencystore	; keep going
 	ret
- 
+
 _movetostrngend:
 	ld	bc,0
 	ld	a,c
 	cpir
 	ret
- 
+
 _versionerror:
 	ld	hl,_versionlibstr
 	jr	_throwerror
@@ -432,39 +432,39 @@ _throwerror:				; draw the error message onscreen
 	ld	(mpLcdCtrl),a
 	ld	sp,(eSP)
 	push	hl
-	call	_drawstatusbar
-	call	_clrscrn		; clean up the screen a bit
-	call	_homeup			; if we encounter an error
+	call	_DrawStatusBar
+	call	_ClrScrn		; clean up the screen a bit
+	call	_HomeUp			; if we encounter an error
 	pop	hl
 	set	textInverse,(iy+textFlags)
 	ld	a,2
 	ld	(curcol),a
-	call	_puts
+	call	_PutS
 	res	textInverse,(iy+textFlags)
-	call	_newline
-	call	_newline		; make it look pretty
+	call	_NewLine
+	call	_NewLine		; make it look pretty
 	ld	hl,_libnamestr
-	call	_puts
-	ld	hl,op1+1
-	call	_puts
-	call	_newline
-	call	_newline
+	call	_PutS
+	ld	hl,OP1+1
+	call	_PutS
+	call	_NewLine
+	call	_NewLine
 	ld	hl,_downloadstr
-	call	_puts
+	call	_PutS
 	push	hl
-	call	_newline
+	call	_NewLine
 	pop	hl
-	call	_puts
+	call	_PutS
 _waitkeyloop:
-	call	_getcsc
-	cp	a,skenter
+	call	_GetCSC
+	cp	a,skEnter
 	jr	z,_exitwaitloop
-	cp	a,skclear
+	cp	a,skClear
 	jr	z,_exitwaitloop
 	jr	_waitkeyloop
 _exitwaitloop:
-	call	_clrscrn
-	jp	_homeup			; stop execution of the program
+	call	_ClrScrn
+	jp	_HomeUp			; stop execution of the program
 
 _versionlibstr:				; strings for LibLoad Errors
 	db	"ERROR: Library Version",0
