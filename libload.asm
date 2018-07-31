@@ -70,7 +70,6 @@ end macro
 org 0					; base location
 
 _libload:				; this code executes in the archive (entered with jp (hl)
-	call	_PushOP1
 	ld	iy,flags		; make sure iy is correct
 	push	de
 	push	hl
@@ -104,8 +103,12 @@ relocate(plotSScreen)
 
 	ld	a,(hl)			; hl->maybe $C0 -- If the program is including libs
 	cp	a,lib_byte		; is there a library we have to extract?
-	jr	z,_extractlib		; if not, just run it from wherever de was pointing
+	jr	z,_startrelocating	; if not, just run it from wherever de was pointing
 	jp	(hl)			; return to execution if there are no libs
+_startrelocating:
+	push	hl
+	call	_PushOP1		; save program name
+	pop	hl
 _extractlib:				; hl->NULL terminated libray name string -> $C0,"LIBNAME",0
 	ld	(hl),appVarObj		; change $C0 byte to mark as extracted
 	push	hl
