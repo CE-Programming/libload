@@ -70,6 +70,7 @@ end macro
 org 0					; base location
 
 _libload:				; this code executes in the archive (entered with jp (hl)
+	call	_PushOP1
 	ld	iy,flags		; make sure iy is correct
 	push	de
 	push	hl
@@ -180,9 +181,9 @@ _findbinary:
 _foundlibrary:
 	call	_chkinram
 	jr	nz,_libinarc		; if the library is found in ram, archive the library and search again
-	call	_pushop1
-	call	_arc_unarc
-	call	_popop1
+	call	_PushOP1
+	call	_Arc_Unarc
+	call	_PopOP1
 	jr	_findbinary
 _libinarc:
 	ex	de,hl
@@ -191,7 +192,7 @@ _libinarc:
 	ld	e,(hl)
 	add	hl,de
 	inc	hl			; hl->size bytes
-	call	_loaddeind_s		; de=total size of library
+	call	_LoadDEInd_s		; de=total size of library
 	push	de
 	pop	bc			; bc=total size of library
 ;	ld	(totallibsize),bc
@@ -378,6 +379,7 @@ _nosetstart:
 	jp	_extractlib		; extract current dependency if needed, or resolve entry points
 
 _runpgrm:
+	call	_PopOP1			; restore program name
 	ld	hl,(prgmstart)
 	jp	(hl)			; passed all the checks; let's start execution! :)
 
@@ -464,7 +466,8 @@ _waitkeyloop:
 	jr	_waitkeyloop
 _exitwaitloop:
 	call	_ClrScrn
-	jp	_HomeUp			; stop execution of the program
+	call	_HomeUp			; stop execution of the program
+	jp	_PopOP1			; restore program name
 
 _versionlibstr:				; strings for LibLoad Errors
 	db	"ERROR: Library Version",0
