@@ -72,9 +72,9 @@ end macro
 
 ; The alternate magic bytes were added to allow LibLoad to present itself as a
 ; library (initially just for the version check, but LibLoad could expose
-; functions in the future as well). The old LibLoad invocation template will
-; start execution from this header, so it needs to be harmless. With these magic
-; bytes, it is assembled as:
+; functions in the future as well). For compatibility, the LibLoad invocation
+; process starts execution from the start of this header, so it needs to be
+; harmless when executed. With these magic bytes, the header is decoded as:
 ;	cp	a,a
 ;	cp	a,VERSION_MAJOR*10+VERSION_MINOR
 library 'LibLoad', VERSION_MAJOR*10+VERSION_MINOR, libmagic1alt, libmagic2alt
