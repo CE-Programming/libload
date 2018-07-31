@@ -81,7 +81,7 @@ library 'LibLoad', VERSION_MAJOR*10+VERSION_MINOR, libmagic1alt, libmagic2alt
 
 ; We *are* the relocator, so we can't use relocations here. Set origin to 0
 ; (shifted by library stuff before this) and perform any relocations manually.
-relocate _libload, 3			; this code executes in the archive
+relocate _libload, 3			; FIXME magic origin
 	ld	iy,flags		; make sure iy is correct
 	push	de
 	push	hl
