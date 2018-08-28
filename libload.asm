@@ -77,11 +77,11 @@ end macro
 ; harmless when executed. With these magic bytes, the header is decoded as:
 ;	cp	a,a
 ;	cp	a,VERSION_MAJOR*10+VERSION_MINOR
-library 'LibLoad', VERSION_MAJOR*10+VERSION_MINOR, libmagic1alt, libmagic2alt
+library 'LibLoad', VERSION_MAJOR*10+VERSION_MINOR, <libmagic1alt,libmagic2alt>
 
 ; We *are* the relocator, so we can't use relocations here. Set origin to 0
 ; (shifted by library stuff before this) and perform any relocations manually.
-relocate _libload, 3			; FIXME magic origin
+disable_relocations
 	ld	iy,flags		; make sure iy is correct
 	push	de
 	push	hl
@@ -500,4 +500,4 @@ _urlstr:
 	db	"https://tiny.cc/clibs",0
 
 end relocate
-end relocate
+enable_relocations
