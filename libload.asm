@@ -1,6 +1,6 @@
 ;=========================================================================
 ; Copyright (C) 2015-2018 Matt Waltz
-; Version 2.2
+; Version 3.0
 ;
 ; This library is free software; you can redistribute it and/or
 ; modify it under the terms of the GNU Lesser General Public
@@ -11,6 +11,7 @@
 ;=========================================================================
 ; Performs dynamic relocation for shared libraries and interdependencies
 ; inputs: de->start of library relocation table
+;         hl->start of LibLoad
 ; output: once relocation of program and library dependencies is complete,
 ;         jumps to start of program block after relocation block and begins execution
 ; note:   updated size is added to the copy in ram of the program for libraries
@@ -20,13 +21,10 @@
 ;=========================================================================
 
 ; includes
-include 'include/ez80.inc'
-include 'include/ti84pceg.inc'		; standard include file
-include 'include/tiformat.inc'		; ti format for fasmg
-format ti appvar 'LibLoad' archived
+include 'include/library.inc'
 
-define VERSION_MAJOR       2
-define VERSION_MINOR       1
+define VERSION_MAJOR       3
+define VERSION_MINOR       0
 
 ; global equates
 arclibrarylocations        = pixelShadow2   ; place to store locations of archived libraries
@@ -51,25 +49,39 @@ libnameptr                 = pixelShadow+42 ; pointer to name of library to extr
 ; macro definitions
 define lib_byte            $C0		; library signifier byte
 define jp_byte             $C3		; byte for 'jp' opcode
+define libmagic1           $C0		; library magic byte 1
+define libmagic2           $C1		; library magic byte 2
+define libmagic1alt        $BF		; alternate library magic byte 1
+define libmagic2alt        $FE		; alternate library magic byte 2
 define asmflag             $22		; flag storage
 
 define prevextracted       0
 define foundprgmstart      1
 define keeplibinarc        2
 
-macro relocate location
-	olocation = $
-	org location
-	rlocation = location
+macro relocate? name, address*
+	name.source? := $
+	name.destination? := address
+	org name.destination?
+	macro end?.relocate?
+		name.length? := $ - name.destination?
+		org name.source? + name.length?
+		purge end?.relocate?
+	end macro
 end macro
 
-macro endrelocate
-	org $-rlocation+olocation
-end macro
+; The alternate magic bytes were added to allow LibLoad to present itself as a
+; library (initially just for the version check, but LibLoad could expose
+; functions in the future as well). For compatibility, the LibLoad invocation
+; process starts execution from the start of this header, so it needs to be
+; harmless when executed. With these magic bytes, the header is decoded as:
+;	cp	a,a
+;	cp	a,VERSION_MAJOR*10+VERSION_MINOR
+library 'LibLoad', VERSION_MAJOR*10+VERSION_MINOR, <libmagic1alt,libmagic2alt>
 
-org 0					; base location
-
-_libload:				; this code executes in the archive (entered with jp (hl)
+; We *are* the relocator, so we can't use relocations here. Set origin to 0
+; (shifted by library stuff before this) and perform any relocations manually.
+disable_relocations
 	ld	iy,flags		; make sure iy is correct
 	push	de
 	push	hl
@@ -84,19 +96,17 @@ _libload:				; this code executes in the archive (entered with jp (hl)
 	ld	(enddependencyqueue),hl
 	pop	hl			; restore the pointer to LibLoad
 
-	ld	de,_libloadstart
+	ld	de,_libloadstart.source
 	add	hl,de
-	ld	de,plotSScreen
-	ld	bc,_libloadend-_libloadstart
+	ld	de,_libloadstart.destination
+	ld	bc,_libloadstart.length
 	ldir				; relocate the actual LibLoad
 
 	res	foundprgmstart,(iy+asmflag)
 
-	jp	plotSScreen		; jump to execution block
+	jp	_libloadstart.destination ; jump to execution block
 
-; Relocated block begins here
-_libloadstart:
-relocate(plotSScreen)
+relocate _libloadstart, plotSScreen
 	pop	hl			; hl->start of library jump table
 
 	ld	(eSP),sp		; save the stack pointer if we hit an error
@@ -199,20 +209,26 @@ _libinarc:
 	push	de
 	pop	bc			; bc=total size of library
 ;	ld	(totallibsize),bc
-
 	ld	(appvarstartptr),hl	; hl->start of appvar in archived memory
-	ld	a,(hl)			; $C0
-	inc	hl
-	inc	a
-	cp	a,(hl)			; $C1 - Magic number checks
 
+assert libmagic1 = libmagic1alt+1
+	ld	a,(hl)			; magic byte check 1
+	sub	a,libmagic1alt+2
+	add	a,2
+	jr	nc,_libmagicerrornz
+	inc	hl
+	ld	a,(hl)			; magic byte check 2
+	cp	a,libmagic2
+	jr	z,_libexists
+	cp	a,libmagic2alt
+_libmagicerrornz:
 	jp	nz,_versionerror	; throw an error if the library doesn't match the magic numbers
 
 _libexists:
 	inc	hl			; hl->version byte in library
 	push	hl			; save location of version byte
 	dec	bc
-	dec	bc			; for the $C0,$C1 bytes
+	dec	bc			; for the two magic bytes
 	add	hl,bc			; hl->end of library
 	ld	bc,-3
 	add	hl,bc
@@ -482,8 +498,6 @@ _downloadstr:
 	db	"Download here: ",0
 _urlstr:
 	db	"https://tiny.cc/clibs",0
-endrelocate
 
-_libloadend:
-	db	VERSION_MAJOR,VERSION_MINOR ; version information
-_libload_end:
+end relocate
+enable_relocations

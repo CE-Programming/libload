@@ -84,12 +84,36 @@ macro @ez80.classify @val, @ind*, @arg&
 end macro
 
 long? = 3
-macro dl? @values*&
-	emit long?: @value
+; FIXME: dup relocations
+macro dw? @values*&
+	if @ez80.adl
+		emit word?: @values
+	else
+		match left =dup? right, @values
+			emit word?: @values
+		else
+			iterate @value, @values
+				@ez80.word @value
+			end iterate
+		end match
+	end if
 end macro
-iterate @name, dl, rl
-	struc @name? @values*&
-		label .: long?
+macro dl? @values*&
+	if @ez80.adl
+		match left =dup? right, @values
+			emit long?: @values
+		else
+			iterate @value, @values
+				@ez80.word @value
+			end iterate
+		end match
+	else
+		emit long?: @values
+	end if
+end macro
+iterate @name, dw, rw, dl, rl
+	struc (name) @name? @values*&
+		label name: long?
 		@name? @values
 	end struc
 end iterate
@@ -209,11 +233,11 @@ macro inst! @name*, @params&
 	end virtual
 	esc macro @name? @params
 		local before, after, noerr
-		before:
+		label before
 		eval @temp
 end macro
 macro end?.inst!
-		after:
+		label after
 		if ~defined noerr & before = after
 			err 'invalid arguments'
 		end if
@@ -480,18 +504,10 @@ inst ld, @dst, @src*
 				           byte src
 			end if
 		else if dst @ez80.is_reg @ez80.wreg & dst metadata 1 scale 1 and 004o
-			if src relativeto src element 1 & src @ez80.is_reg @ez80.wreg
-				if dst eq? sp
-					if src metadata 1 scale 0 = 040o
-						@ez80.emit idxpre src, byte 371o
-					end if
-				else if src metadata 1 scale 1 = 007o
-					@ez80.nest push? src
-					@ez80.nest pop? dst
-				else
-					@ez80.nest lea? dst, src
-				end if
-			else if src eq i? & dst eq hl?
+			if dst eq sp? & src eq src element 1 & src @ez80.is_reg @ez80.wreg \
+			 & src metadata 1 scale 0 = 040o
+				@ez80.emit idxpre src, byte 371o
+			else if dst eq hl? & src eq i?
 				@ez80.emit <byte 355o, 327o>
 			else
 				@ez80.emit idxpre dst, byte dst metadata 1 scale 0 or 001o, \
@@ -841,22 +857,6 @@ inst mlt, @reg*
 		@ez80.emit <byte 355o, reg metadata 1 scale 0 or 114o>
 	end if
 end inst
-
-inst rcf
-	@ez80.nest or? a?, a?
-end inst
-iterate <@name, @carry>, \
-         uext,  rcf,     \
-         sext,  rla
-	inst @name, @reg*
-		if regind
-			err 'invalid indirection'
-		else
-			@ez80.nest @carry?
-			@ez80.nest sbc? reg, reg
-		end if
-	end inst
-end iterate
 
 purge inst
 purge end?.inst
