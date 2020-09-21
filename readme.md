@@ -1,15 +1,8 @@
 ## LibLoad
-LibLoad is simply a loader makes it possible to share libraries between different programs, and enforces library versioning.
+LibLoad is a dynamic library loader for the TI-84+ CE series calculators.
 
 ## Installing
-To install LibLoad on your calculator, simply send `LibLoad.8xv` to your calcualtor using TI Connect CE or TILP.
+To install LibLoad on your calculator, send `LibLoad.8xv` to your calculator.
 
 ## Download
 You can find the latest version of LibLoad here: https://github.com/CE-Programming/libraries/releases/latest
-
-### Building LibLoad
-Download `flat assembler g` available [here](https://flatassembler.net/download.php) near the bottom of the page.
-
-Then execute:
-
-    fasmg libload.asm libload.8xv
